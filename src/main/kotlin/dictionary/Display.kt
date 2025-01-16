@@ -1,26 +1,30 @@
 package dictionary
 
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import java.awt.BorderLayout
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.util.concurrent.Executors
 import javax.swing.*
 
+@OptIn(FlowPreview::class)
 object Display {
 
-    private lateinit var queries: Flow<String>
+    private val queries = Channel<String>()
+
 
     private val dispatcher = Executors.newCachedThreadPool().asCoroutineDispatcher()
-    private val job = SupervisorJob()
-    private val scope = CoroutineScope(dispatcher + job)
+    private val scope = CoroutineScope(dispatcher)
     private val repository = Repository
-    private var loadingJob: Job? = null
 
     private val enterWordLabel = JLabel("Enter word: ")
     private val searchField = JTextField(20).apply {
@@ -31,16 +35,16 @@ object Display {
         })
     }
 
-    private val resultArea = JTextArea(25, 50).apply {
-        isEditable = false
-        lineWrap = true
-        wrapStyleWord = true
-    }
-
     private val searchButton = JButton("Search").apply {
         addActionListener {
             loadDefinitions()
         }
+    }
+
+    private val resultArea = JTextArea(25, 50).apply {
+        isEditable = false
+        lineWrap = true
+        wrapStyleWord = true
     }
 
     private val topPanel = JPanel().apply {
@@ -58,28 +62,27 @@ object Display {
     }
 
     private fun loadDefinitions() {
-        loadingJob?.cancel()
-        loadingJob = scope.launch {
-            searchButton.isEnabled = false
-            resultArea.text = "Loading..."
-            delay(500)
-            val word = searchField.getText().trim()
-            val definition = repository.loadDefinition(word).joinToString("\n\n")
-            resultArea.text = definition.ifEmpty { "Not found" }
-            searchButton.isEnabled = true
+        scope.launch {
+            queries.send(searchField.text.trim())
         }
     }
 
     init {
-        queries
+        queries.consumeAsFlow()
             .onEach {
                 searchButton.isEnabled = false
                 resultArea.text = "Loading..."
-            }.map {
+
+            }.debounce(500) /* Нам прилетел emit, мы установили состояние загрузки, после этого вызываем
+            debounce. У нас произойдет ожидание 500 миллисекунд и если за это время новых emit'ов не поступило, то
+            элемент дальше полетит по цепочке, если же за это время поступит еще один элемент, то старый отменяется и
+            снова будет установлено ожидание в 500 миллисекунд.*/
+            .map {
                 repository.loadDefinition(it)
             }.map {
                 it.joinToString("\n\n").ifEmpty { "Not found" }
             }.onEach {
+                println(it)
                 resultArea.text = it
                 searchButton.isEnabled = true
             }.launchIn(scope)
