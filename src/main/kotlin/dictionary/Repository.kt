@@ -1,18 +1,10 @@
 package dictionary
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URI
-import java.util.concurrent.Executors
-import kotlin.math.log
 
 object Repository {
 
