@@ -1,11 +1,8 @@
 package dictionary
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import java.awt.BorderLayout
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
@@ -16,7 +13,7 @@ import javax.swing.*
 object Display {
 
     private val queries = Channel<String>()
-    private val state = MutableSharedFlow<ScreenState>()
+    val state = MutableStateFlow<ScreenState>(ScreenState.Initial)
 
     private val dispatcher = Executors.newCachedThreadPool().asCoroutineDispatcher()
     private val scope = CoroutineScope(dispatcher)
@@ -81,32 +78,44 @@ object Display {
                 }
             }.launchIn(scope)
 
-        state.onStart {
-            emit(ScreenState.Initial)
+        state.onEach {
+                when (it) {
+                    is ScreenState.DefinitionsLoaded -> {
+                        resultArea.text = it.definition.joinToString("\n\n")
+                        searchButton.isEnabled = true
+                    }
+
+                    ScreenState.Initial -> {
+                        resultArea.text = ""
+                        searchButton.isEnabled = false
+                    }
+
+                    ScreenState.Loading -> {
+                        resultArea.text = "Loading..."
+                        searchButton.isEnabled = false
+                    }
+
+                    ScreenState.NotFound -> {
+                        resultArea.text = "Not found"
+                        searchButton.isEnabled = true
+                    }
+                }
+            }.launchIn(scope)
+    }
+
+    fun show() {
+        mainFrame.isVisible = true
+    }
+}
+
+fun main() {
+    Display.show()
+    CoroutineScope(Dispatchers.IO).launch() {
+        delay(10_000)
+        println("Second subscriber")
+        Display.state.collect {
+            println(it)
         }
-            .onEach {
-            when (it) {
-                is ScreenState.DefinitionsLoaded -> {
-                    resultArea.text = it.definition.joinToString("\n\n")
-                    searchButton.isEnabled = true
-                }
-
-                ScreenState.Initial -> {
-                    resultArea.text = ""
-                    searchButton.isEnabled = false
-                }
-
-                ScreenState.Loading -> {
-                    resultArea.text = "Loading..."
-                    searchButton.isEnabled = false
-                }
-
-                ScreenState.NotFound -> {
-                    resultArea.text = "Not found"
-                    searchButton.isEnabled = true
-                }
-            }
-        }.launchIn(scope)
     }
 }
 
