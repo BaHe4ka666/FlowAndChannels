@@ -4,11 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.consumeAsFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.awt.BorderLayout
 import java.awt.event.KeyAdapter
@@ -20,7 +16,7 @@ import javax.swing.*
 object Display {
 
     private val queries = Channel<String>()
-
+    private val state = MutableSharedFlow<ScreenState>()
 
     private val dispatcher = Executors.newCachedThreadPool().asCoroutineDispatcher()
     private val scope = CoroutineScope(dispatcher)
@@ -70,26 +66,47 @@ object Display {
     init {
         queries.consumeAsFlow()
             .onEach {
-                searchButton.isEnabled = false
-                resultArea.text = "Loading..."
-
-            }.debounce(500) /* Нам прилетел emit, мы установили состояние загрузки, после этого вызываем
-            debounce. У нас произойдет ожидание 500 миллисекунд и если за это время новых emit'ов не поступило, то
-            элемент дальше полетит по цепочке, если же за это время поступит еще один элемент, то старый отменяется и
-            снова будет установлено ожидание в 500 миллисекунд.*/
+                state.emit(ScreenState.Loading)
+            }.debounce(500)
             .map {
-                repository.loadDefinition(it)
-            }.map {
-                it.joinToString("\n\n").ifEmpty { "Not found" }
-            }.onEach {
-                println(it)
-                resultArea.text = it
-                searchButton.isEnabled = true
+                if (it.isEmpty()) {
+                    state.emit(ScreenState.Initial)
+                } else {
+                    val result = repository.loadDefinition(it)
+                    if (result.isEmpty()) {
+                        state.emit(ScreenState.NotFound)
+                    } else {
+                        state.emit(ScreenState.DefinitionsLoaded(result))
+                    }
+                }
             }.launchIn(scope)
-    }
 
+        state.onStart {
+            emit(ScreenState.Initial)
+        }
+            .onEach {
+            when (it) {
+                is ScreenState.DefinitionsLoaded -> {
+                    resultArea.text = it.definition.joinToString("\n\n")
+                    searchButton.isEnabled = true
+                }
 
-    fun show() {
-        mainFrame.isVisible = true
+                ScreenState.Initial -> {
+                    resultArea.text = ""
+                    searchButton.isEnabled = false
+                }
+
+                ScreenState.Loading -> {
+                    resultArea.text = "Loading..."
+                    searchButton.isEnabled = false
+                }
+
+                ScreenState.NotFound -> {
+                    resultArea.text = "Not found"
+                    searchButton.isEnabled = true
+                }
+            }
+        }.launchIn(scope)
     }
 }
+
