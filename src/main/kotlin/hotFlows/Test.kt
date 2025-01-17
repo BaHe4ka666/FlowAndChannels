@@ -12,8 +12,9 @@ private val scope = CoroutineScope(dispatcher)
 
 
 fun main() {
-    val flow = Repository.timer
+    val flow = RepositoryColdFlows.timer
     scope.launch {
+        delay(2000)
         flow.collect {
             println("Coroutine 1: $it")
         }
