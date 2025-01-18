@@ -22,7 +22,7 @@ fun main() {
             }
     }
 }
-    
+
 private fun getFlow(): Flow<Int> {
     return flow {
         repeat(5) {

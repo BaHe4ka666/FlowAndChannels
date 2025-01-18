@@ -61,7 +61,7 @@ object Display {
     }
 
     init {
-        queries.consumeAsFlow()
+        queries.receiveAsFlow()
             .onEach {
                 state.emit(ScreenState.Loading)
             }.debounce(500)
@@ -76,31 +76,40 @@ object Display {
                         state.emit(ScreenState.DefinitionsLoaded(result))
                     }
                 }
+            }
+            .retry() {
+                state.emit(ScreenState.Error)
+                true
             }.launchIn(scope)
 
         state.onEach {
-                when (it) {
-                    is ScreenState.DefinitionsLoaded -> {
-                        resultArea.text = it.definition.joinToString("\n\n")
-                        searchButton.isEnabled = true
-                    }
-
-                    ScreenState.Initial -> {
-                        resultArea.text = ""
-                        searchButton.isEnabled = false
-                    }
-
-                    ScreenState.Loading -> {
-                        resultArea.text = "Loading..."
-                        searchButton.isEnabled = false
-                    }
-
-                    ScreenState.NotFound -> {
-                        resultArea.text = "Not found"
-                        searchButton.isEnabled = true
-                    }
+            when (it) {
+                is ScreenState.DefinitionsLoaded -> {
+                    resultArea.text = it.definition.joinToString("\n\n")
+                    searchButton.isEnabled = true
                 }
-            }.launchIn(scope)
+
+                ScreenState.Initial -> {
+                    resultArea.text = ""
+                    searchButton.isEnabled = false
+                }
+
+                ScreenState.Loading -> {
+                    resultArea.text = "Loading..."
+                    searchButton.isEnabled = false
+                }
+
+                ScreenState.NotFound -> {
+                    resultArea.text = "Not found"
+                    searchButton.isEnabled = true
+                }
+
+                ScreenState.Error -> {
+                    resultArea.text = "Something went wrong"
+                    searchButton.isEnabled = true
+                }
+            }
+        }.launchIn(scope)
     }
 
     fun show() {
